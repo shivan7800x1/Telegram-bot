@@ -1,0 +1,10 @@
+services:
+  - type: web
+    name: craxrat-bot
+    env: python
+    plan: starter
+    buildCommand: pip install -r requirements.txt
+    startCommand: python main.py
+    envVars:
+      - key: TELEGRAM_TOKEN
+        sync: false
