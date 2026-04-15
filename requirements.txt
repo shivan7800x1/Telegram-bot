@@ -1,0 +1,8 @@
+# Dependencies
+apt update && apt install -y python3-pip ffmpeg libcamera0 v4l-utils
+pip3 install python-telegram-bot==20.7 requests pynput pillow opencv-python pyautogui psutil cryptography
+
+# Env vars
+echo 'BOT_TOKEN="your_bot_token"' >> .env
+echo 'CHAT_ID="your_chat_id"' >> .env
+echo 'ENCRYPTION_KEY="your_32char_aes_key_here"' >> .env  # openssl rand -hex 32
